@@ -1,0 +1,584 @@
+
+name: LEVI WAR APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Create Android Game
+        shell: bash
+        run: |
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/java/com/leviwar/game
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'LeviWar'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.leviwar.game'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.leviwar.game'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:label="LEVI WAR"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:hardwareAccelerated="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="landscape"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/leviwar/game/MainActivity.java <<'EOF'
+          package com.leviwar.game;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.webkit.WebView;
+          import android.webkit.WebSettings;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+
+                  getWindow().getDecorView().setSystemUiVisibility(
+                      View.SYSTEM_UI_FLAG_FULLSCREEN |
+                      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                      View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                      View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                      View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                  );
+
+                  WebView game = new WebView(this);
+                  game.setBackgroundColor(0xFF080D19);
+
+                  WebSettings settings = game.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+
+                  setContentView(game);
+                  game.loadUrl("file:///android_asset/index.html");
+              }
+          }
+          EOF
+
+          cat > app/src/main/assets/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="ar">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+          <title>LEVI WAR</title>
+          <style>
+          *{box-sizing:border-box}
+          body{margin:0;background:#080d19;color:white;font-family:Arial;overflow:hidden;touch-action:none}
+          canvas{position:absolute;width:100%;height:100%;inset:0}
+          #hud{position:absolute;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+          .panel{background:#101a2ddd;border:1px solid #8296b5;padding:8px 12px;border-radius:9px;text-shadow:1px 1px #000}
+          .bar{height:9px;width:125px;background:#263044;margin-top:5px;border-radius:8px;overflow:hidden}
+          .fill{height:100%;width:100%;background:#e52d45}
+          #mana{background:#168ee8}
+          #controls{position:absolute;bottom:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:end}
+          .group{display:flex;gap:8px}
+          button{width:60px;height:60px;border-radius:50%;border:2px solid #c7d6ef;background:#172842d9;color:white;font-size:23px;font-weight:bold;touch-action:none}
+          .sword{width:74px;height:74px;background:#a51f39e8;border-color:#ff8495}
+          .skill{background:#1264a7e8}
+          #menu{position:absolute;inset:0;background:linear-gradient(#080d19cc,#080d19f5);display:flex;align-items:center;justify-content:center;text-align:center}
+          #menuBox{padding:24px;background:#111c30;border:1px solid #8094b4;border-radius:16px;max-width:90%}
+          #menu h1{font-size:34px;letter-spacing:3px;color:#e5eaf5}
+          #menu button{width:auto;height:auto;border-radius:9px;padding:12px 30px;background:#ad243f}
+          #msg{font-size:14px;color:#c5d2e7}
+          </style>
+          </head>
+          <body>
+          <canvas id="game"></canvas>
+
+          <div id="hud">
+            <div class="panel">
+              <b>⚔ LEVI</b>
+              <div>HP <span id="hpnum">100</span></div>
+              <div class="bar"><div id="hp" class="fill"></div></div>
+              <div>MP <span id="mpnum">50</span></div>
+              <div class="bar"><div id="mp" class="fill" style="background:#168ee8"></div></div>
+            </div>
+            <div class="panel" id="wave">المعركة 1</div>
+            <div class="panel">☠ <span id="kills">0</span> | ◉ <span id="coins">0</span></div>
+          </div>
+
+          <div id="controls">
+            <div class="group">
+              <button data-k="left">◀</button>
+              <button data-k="right">▶</button>
+            </div>
+            <div class="group">
+              <button data-k="jump">⬆</button>
+              <button data-k="skill" class="skill">✦</button>
+              <button data-k="attack" class="sword">⚔</button>
+            </div>
+          </div>
+
+          <div id="menu">
+            <div id="menuBox">
+              <h1>LEVI WAR</h1>
+              <h3>حرب العمالقة</h3>
+              <p id="msg">اقتحم القلعة وأنقذ المملكة</p>
+              <button id="start">ابدأ المعركة</button>
+            </div>
+          </div>
+
+          <script>
+          (() => {
+          const c=document.getElementById('game');
+          const ctx=c.getContext('2d');
+          const keys={};
+          let player,enemies=[],particles=[];
+          let playing=false,wave=1,kills=0,coins=0;
+          let timer=0,attackTimer=0,skillTimer=0;
+          let last=0,screenShake=0;
+
+          function resize(){
+            c.width=960;
+            c.height=540;
+          }
+          resize();
+
+          document.querySelectorAll('[data-k]').forEach(b=>{
+            const k=b.dataset.k;
+            b.addEventListener('pointerdown',e=>{
+              e.preventDefault();
+              keys[k]=true;
+            });
+            ['pointerup','pointercancel','pointerleave'].forEach(t=>{
+              b.addEventListener(t,()=>keys[k]=false);
+            });
+          });
+
+          function start(){
+            player={x:250,y:410,v:0,hp:100,mp:50,face:1,ground:true,inv:0,slash:0};
+            enemies=[];
+            particles=[];
+            wave=1;kills=0;coins=0;timer=0;
+            playing=true;
+            document.getElementById('menu').style.display='none';
+            for(let i=0;i<4;i++)spawn(false);
+          }
+
+          document.getElementById('start').onclick=start;
+
+          function spawn(boss){
+            enemies.push({
+              x:850+Math.random()*120,
+              hp:boss?15:3,
+              max:boss?15:3,
+              speed:boss?24:45+Math.random()*18,
+              boss:boss,hit:0
+            });
+          }
+
+          function burst(x,y,color,n){
+            for(let i=0;i<n;i++){
+              particles.push({
+                x,y,
+                vx:(Math.random()-.5)*230,
+                vy:(Math.random()-.7)*190,
+                life:.3+Math.random()*.5,
+                color
+              });
+            }
+          }
+
+          function rect(x,y,w,h,color){
+            ctx.fillStyle=color;
+            ctx.fillRect(x,y,w,h);
+          }
+
+          function background(){
+            let g=ctx.createLinearGradient(0,0,0,540);
+            g.addColorStop(0,'#10152b');
+            g.addColorStop(.55,'#35344b');
+            g.addColorStop(1,'#171b2b');
+            rect(0,0,960,540,g);
+
+            // القمر الأحمر
+            ctx.fillStyle='#c94350';
+            ctx.beginPath();
+            ctx.arc(755,105,62,0,7);
+            ctx.fill();
+            ctx.fillStyle='#e27a76';
+            ctx.globalAlpha=.25;
+            ctx.beginPath();
+            ctx.arc(735,85,20,0,7);
+            ctx.fill();
+            ctx.globalAlpha=1;
+
+            // القلعة
+            rect(350,245,260,195,'#293248');
+            for(let i=0;i<6;i++){
+              let x=350+i*52;
+              rect(x,210,30,40,'#38435b');
+              ctx.fillStyle='#1a2238';
+              ctx.beginPath();
+              ctx.moveTo(x-5,210);
+              ctx.lineTo(x+15,170);
+              ctx.lineTo(x+35,210);
+              ctx.fill();
+            }
+
+            // أبراج بعيدة
+            for(let i=0;i<12;i++){
+              let x=i*95-20;
+              rect(x,300-(i%3)*30,55,150,'#252c40');
+              rect(x+18,280-(i%3)*30,12,20,'#ec8150');
+            }
+
+            // العملاق في الخلفية
+            ctx.fillStyle='#673c4c';
+            ctx.beginPath();
+            ctx.ellipse(780,290,90,145,0,0,7);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(780,160,40,0,7);
+            ctx.fill();
+            rect(755,145,9,6,'#ff334c');
+            rect(793,145,9,6,'#ff334c');
+
+            // اللهب
+            for(let i=0;i<9;i++){
+              let x=i*120+30;
+              ctx.fillStyle='#e65b32';
+              ctx.beginPath();
+              ctx.ellipse(x,425,12,32,0,0,7);
+              ctx.fill();
+              ctx.fillStyle='#ffb34d';
+              ctx.beginPath();
+              ctx.ellipse(x,430,5,19,0,0,7);
+              ctx.fill();
+            }
+
+            rect(0,440,960,100,'#343039');
+            rect(0,440,960,7,'#a7a0a0');
+            for(let i=0;i<24;i++){
+              rect(i*45,465,30,3,'#554a4b');
+            }
+          }
+
+          function levi(){
+            const p=player;
+            ctx.save();
+            ctx.translate(p.x,p.y);
+            ctx.scale(p.face,1);
+
+            if(p.inv>0 && Math.floor(p.inv*15)%2)ctx.globalAlpha=.45;
+
+            // العباءة
+            ctx.fillStyle='#263e43';
+            ctx.beginPath();
+            ctx.moveTo(-10,-68);
+            ctx.lineTo(-42,-42);
+            ctx.lineTo(-20,-10);
+            ctx.lineTo(7,-48);
+            ctx.fill();
+
+            // الجسم
+            rect(-13,-67,26,37,'#c6d3d8');
+            rect(-13,-30,11,30,'#303b50');
+            rect(3,-30,11,30,'#303b50');
+
+            // الوجه والشعر
+            ctx.fillStyle='#e8c5a7';
+            ctx.beginPath();
+            ctx.arc(0,-81,13,0,7);
+            ctx.fill();
+            ctx.fillStyle='#1c202c';
+            ctx.beginPath();
+            ctx.moveTo(-14,-82);
+            ctx.lineTo(-12,-99);
+            ctx.lineTo(0,-105);
+            ctx.lineTo(14,-94);
+            ctx.lineTo(11,-80);
+            ctx.lineTo(3,-91);
+            ctx.lineTo(-5,-78);
+            ctx.fill();
+
+            // العين
+            rect(5,-84,5,3,'#242332');
+
+            // السيوف
+            rect(12,-60,49,3,'#e7f4ff');
+            rect(-34,-56,35,3,'#e7f4ff');
+
+            if(p.slash>0){
+              ctx.strokeStyle='#bdeaff';
+              ctx.lineWidth=9;
+              ctx.beginPath();
+              ctx.arc(25,-55,68,-1.1,.8);
+              ctx.stroke();
+              ctx.strokeStyle='#fff';
+              ctx.lineWidth=2;
+              ctx.stroke();
+            }
+
+            ctx.restore();
+          }
+
+          function enemy(e){
+            ctx.save();
+            ctx.translate(e.x,410);
+
+            let color=e.boss?'#774451':'#5c3847';
+            rect(-17,-64,34,64,color);
+            rect(-24,-56,12,35,'#393448');
+            rect(12,-56,12,35,'#393448');
+            rect(-14,-20,11,20,'#282d3e');
+            rect(4,-20,11,20,'#282d3e');
+
+            ctx.fillStyle='#c7a59d';
+            ctx.beginPath();
+            ctx.arc(0,-75,e.boss?23:14,0,7);
+            ctx.fill();
+
+            rect(-9,-78,5,4,'#f33e55');
+            rect(4,-78,5,4,'#f33e55');
+
+            rect(-18,-102,36,5,'#151a28');
+            rect(-18,-102,36*e.hp/e.max,5,'#ed3e50');
+
+            if(e.boss){
+              ctx.fillStyle='#ffcf80';
+              ctx.font='bold 14px Arial';
+              ctx.textAlign='center';
+              ctx.fillText('العملاق',0,-116);
+            }
+            ctx.restore();
+          }
+
+          function draw(){
+            ctx.save();
+            if(screenShake>0){
+              ctx.translate((Math.random()-.5)*screenShake,(Math.random()-.5)*screenShake);
+            }
+
+            background();
+            if(player)levi();
+            enemies.forEach(enemy);
+
+            particles.forEach(a=>{
+              ctx.globalAlpha=Math.max(0,a.life*2);
+              rect(a.x,a.y,5,5,a.color);
+            });
+            ctx.globalAlpha=1;
+            ctx.restore();
+          }
+
+          function update(dt){
+            if(!playing)return;
+
+            const p=player;
+            p.inv=Math.max(0,p.inv-dt);
+            p.slash=Math.max(0,p.slash-dt);
+            attackTimer=Math.max(0,attackTimer-dt);
+            skillTimer=Math.max(0,skillTimer-dt);
+
+            if(keys.left){p.x-=230*dt;p.face=-1}
+            if(keys.right){p.x+=230*dt;p.face=1}
+            p.x=Math.max(30,Math.min(930,p.x));
+
+            if(keys.jump&&p.ground){
+              p.v=-420;
+              p.ground=false;
+            }
+
+            p.v+=1000*dt;
+            p.y+=p.v*dt;
+            if(p.y>=410){p.y=410;p.v=0;p.ground=true}
+
+            if(keys.attack&&attackTimer<=0){
+              attackTimer=.4;
+              p.slash=.22;
+              enemies.forEach(e=>{
+                if(Math.abs(e.x-p.x)<115 &&
+                   Math.sign(e.x-p.x)===p.face){
+                  e.hp-=2;
+                  e.hit=.2;
+                  burst(e.x,360,'#ffe4a0',9);
+                  screenShake=5;
+                }
+              });
+            }
+
+            if(keys.skill&&skillTimer<=0&&p.mp>=15){
+              skillTimer=1.5;
+              p.mp-=15;
+              enemies.forEach(e=>{
+                if(Math.abs(e.x-p.x)<260){
+                  e.hp-=3;
+                  burst(e.x,350,'#63caff',15);
+                }
+              });
+            }
+            keys.skill=false;
+
+            enemies.forEach(e=>{
+              if(e.x>p.x+30)e.x-=e.speed*dt;
+              else if(e.x<p.x-30)e.x+=e.speed*dt;
+              else if(p.inv<=0){
+                p.hp-=e.boss?17:9;
+                p.inv=.7;
+                burst(p.x,360,'#fa5360',8);
+                screenShake=8;
+              }
+              e.hit=Math.max(0,e.hit-dt);
+            });
+
+            let before=enemies.length;
+            enemies=enemies.filter(e=>{
+              if(e.hp<=0){
+                kills++;
+                coins+=e.boss?100:10;
+                burst(e.x,360,'#ffbd78',16);
+                return false;
+              }
+              return true;
+            });
+
+            timer-=dt;
+            if(timer<=0&&enemies.length<5){
+              spawn(false);
+              timer=1.5;
+            }
+
+            if(kills>=wave*8){
+              wave++;
+              spawn(true);
+              kills=0;
+              burst(480,230,'#fff0a0',30);
+            }
+
+            particles.forEach(a=>{
+              a.x+=a.vx*dt;
+              a.y+=a.vy*dt;
+              a.vy+=240*dt;
+              a.life-=dt;
+            });
+            particles=particles.filter(a=>a.life>0);
+            screenShake=Math.max(0,screenShake-30*dt);
+
+            p.hp=Math.max(0,p.hp);
+            document.getElementById('hp').style.width=p.hp+'%';
+            document.getElementById('mp').style.width=p.mp*2+'%';
+            document.getElementById('hpnum').textContent=Math.ceil(p.hp);
+            document.getElementById('mpnum').textContent=Math.ceil(p.mp);
+            document.getElementById('wave').textContent='المعركة '+wave;
+            document.getElementById('kills').textContent=kills;
+            document.getElementById('coins').textContent=coins;
+
+            if(p.hp<=0){
+              playing=false;
+              document.getElementById('msg').textContent='انتهت المعركة | النقاط: '+coins;
+              document.getElementById('start').textContent='حاول مجدداً';
+              document.getElementById('menu').style.display='flex';
+            }
+          }
+
+          function loop(t){
+            let dt=Math.min((t-last)/1000||0,.033);
+            last=t;
+            update(dt);
+            draw();
+            requestAnimationFrame(loop);
+          }
+          requestAnimationFrame(loop);
+          })();
+          </script>
+          </body>
+          </html>
+          EOF
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK
+        run: test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LEVI-WAR-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
